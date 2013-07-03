@@ -1,6 +1,8 @@
 ninety_weather
 ==============
 
+Slightly modified version for iOS, using Yahoo weather.
+
 91 Weather Watchface.
 This watchface displays the Time, Calendar Week, Sunrise and Sundown and the Weather.
 This required httpebble to be installed on your Smartphone to get the current Weather and Time.
