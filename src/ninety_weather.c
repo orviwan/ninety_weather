@@ -11,9 +11,9 @@
 #include "link_monitor.h"
 
 // This is the Default APP_ID to work with old versions of httpebble
-//#define MY_UUID { 0x91, 0x41, 0xB6, 0x28, 0xBC, 0x89, 0x49, 0x8E, 0xB1, 0x47, 0x04, 0x9F, 0x49, 0xC0, 0x99, 0xAD }
+#define MY_UUID { 0x91, 0x41, 0xB6, 0x28, 0xBC, 0x89, 0x49, 0x8E, 0xB1, 0x47, 0x04, 0x9F, 0x49, 0xC0, 0x99, 0xAD }
 
-#define MY_UUID { 0x91, 0x41, 0xB6, 0x28, 0xBC, 0x89, 0x49, 0x8E, 0xB1, 0x47, 0x29, 0x08, 0xF1, 0x7C, 0x3F, 0xAC}
+//#define MY_UUID { 0x91, 0x41, 0xB6, 0x28, 0xBC, 0x89, 0x49, 0x8E, 0xB1, 0x47, 0x29, 0x08, 0xF1, 0x7C, 0x3F, 0xAC}
 
 PBL_APP_INFO(MY_UUID,
 	     "91 Weather", "rfrcarvalho",
@@ -29,14 +29,15 @@ TextLayer text_temperature_layer;
 TextLayer DayOfWeekLayer;
 BmpContainer background_image;
 BmpContainer time_format_image;
-TextLayer calls_layer;   			/* layer for Phone Calls info */
-TextLayer sms_layer;   				/* layer for SMS info */
+//TextLayer calls_layer;   			/* layer for Phone Calls info */
+//TextLayer sms_layer;   				/* layer for SMS info */
 TextLayer debug_layer;   			/* layer for DEBUG info */
 
 static int our_latitude, our_longitude, our_timezone = 99;
 static bool located = false;
 static bool calculated_sunset_sunrise = false;
 static bool temperature_set = false;
+static int initial_minute;
 
 GFont font_temperature;        		/* font for Temperature */
 
@@ -54,11 +55,11 @@ const int DATENUM_IMAGE_RESOURCE_IDS[] = {
 };
 
 
-#define TOTAL_WEATHER_IMAGES 1
+#define TOTAL_WEATHER_IMAGES 16
 BmpContainer weather_images[TOTAL_WEATHER_IMAGES];
 
-const int WEATHER_IMAGE_RESOURCE_IDS[] = {
-    RESOURCE_ID_IMAGE_CLEAR_DAY,
+static int WEATHER_IMAGE_RESOURCE_IDS[] = {
+	RESOURCE_ID_IMAGE_CLEAR_DAY,
 	RESOURCE_ID_IMAGE_CLEAR_NIGHT,
 	RESOURCE_ID_IMAGE_RAIN,
 	RESOURCE_ID_IMAGE_SNOW,
@@ -68,7 +69,12 @@ const int WEATHER_IMAGE_RESOURCE_IDS[] = {
 	RESOURCE_ID_IMAGE_CLOUDY,
 	RESOURCE_ID_IMAGE_PARTLY_CLOUDY_DAY,
 	RESOURCE_ID_IMAGE_PARTLY_CLOUDY_NIGHT,
-	RESOURCE_ID_IMAGE_NO_WEATHER
+	RESOURCE_ID_IMAGE_THUNDER,
+	RESOURCE_ID_IMAGE_RAIN_SNOW,
+	RESOURCE_ID_IMAGE_SNOW_SLEET,
+	RESOURCE_ID_IMAGE_COLD,
+	RESOURCE_ID_IMAGE_HOT,
+	RESOURCE_ID_IMAGE_NO_WEATHER,
 };
 
 #define TOTAL_DATE_DIGITS 8
@@ -229,7 +235,7 @@ void display_counters(TextLayer *dataLayer, struct Data d, int infoType) {
 void failed(int32_t cookie, int http_status, void* context) {
 	
 	if((cookie == 0 || cookie == WEATHER_HTTP_COOKIE) && !temperature_set) {
-		set_container_image(&weather_images[0], WEATHER_IMAGE_RESOURCE_IDS[10], GPoint(12, 5));
+		set_container_image(&weather_images[0], WEATHER_IMAGE_RESOURCE_IDS[16], GPoint(12, 5));
 		text_layer_set_text(&text_temperature_layer, "---°");
 	}
 	
@@ -246,10 +252,10 @@ void success(int32_t cookie, int http_status, DictionaryIterator* received, void
 	Tuple* icon_tuple = dict_find(received, WEATHER_KEY_ICON);
 	if(icon_tuple) {
 		int icon = icon_tuple->value->int8;
-		if(icon >= 0 && icon < 10) {
+		if(icon >= 0 && icon < 16) {
 			set_container_image(&weather_images[0], WEATHER_IMAGE_RESOURCE_IDS[icon], GPoint(12, 5));  // ---------- Weather Image
 		} else {
-			set_container_image(&weather_images[0], WEATHER_IMAGE_RESOURCE_IDS[10], GPoint(12, 5));
+			set_container_image(&weather_images[0], WEATHER_IMAGE_RESOURCE_IDS[16], GPoint(12, 5));
 		}
 	}
 	
@@ -285,6 +291,7 @@ void reconnect(void* context) {
 bool read_state_data(DictionaryIterator* received, struct Data* d){
 	(void)d;
 	bool has_data = false;
+	
 	Tuple* tuple = dict_read_first(received);
 	if(!tuple) return false;
 	do {
@@ -294,7 +301,7 @@ bool read_state_data(DictionaryIterator* received, struct Data* d){
 				
 				static char temp_calls[5];
 				memcpy(temp_calls, itoa(tuple->value->uint8), 4);
-				text_layer_set_text(&calls_layer, temp_calls);
+				//text_layer_set_text(&calls_layer, temp_calls);
 				
 				has_data = true;
 				break;
@@ -303,13 +310,14 @@ bool read_state_data(DictionaryIterator* received, struct Data* d){
 			
 				static char temp_sms[5];
 				memcpy(temp_sms, itoa(tuple->value->uint8), 4);
-				text_layer_set_text(&sms_layer, temp_sms);
+				//text_layer_set_text(&sms_layer, temp_sms);
 			
 				has_data = true;
 				break;
 		}
 	}
 	while((tuple = dict_read_next(received)));
+	
 	return has_data;
 }
 
@@ -422,9 +430,10 @@ void handle_minute_tick(AppContextRef ctx, PebbleTickEvent *t) {
 
     update_display(t->tick_time);
 	
-	if(!located || !(t->tick_time->tm_min % 15))
+	//if(!located || !(t->tick_time->tm_min % 30))
+	if(!located || (t->tick_time->tm_min % 30) == initial_minute)
 	{
-		// Every 15 minutes, request updated weather
+		// Every 30 minutes, request updated weather
 		http_location_request();
 	}
 	
@@ -505,6 +514,7 @@ void handle_init(AppContextRef ctx) {
 	text_layer_set_font(&DayOfWeekLayer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
 
 	// Calls Info layer
+	/*
 	text_layer_init(&calls_layer, window.layer.frame);
 	text_layer_set_text_color(&calls_layer, GColorWhite);
 	text_layer_set_background_color(&calls_layer, GColorClear);
@@ -521,7 +531,8 @@ void handle_init(AppContextRef ctx) {
 	text_layer_set_font(&sms_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
 	layer_add_child(&window.layer, &sms_layer.layer);
 	text_layer_set_text(&sms_layer, "?");
-
+	*/
+	
 	// DEBUG Info layer 
 	text_layer_init(&debug_layer, window.layer.frame);
 	text_layer_set_text_color(&debug_layer, GColorWhite);
@@ -542,8 +553,11 @@ void handle_init(AppContextRef ctx) {
 	
     // Avoids a blank screen on watch start.
     PblTm tick_time;
-
+	
     get_time(&tick_time);
+	
+	initial_minute = (tick_time.tm_min % 30);
+	
     update_display(&tick_time);
 
 }
@@ -561,6 +575,10 @@ void handle_deinit(AppContextRef ctx) {
 	
 	for (int i = 0; i < TOTAL_TIME_DIGITS; i++) {
 		bmp_deinit_container(&time_digits_images[i]);
+	}
+	
+	for (int i = 0; i < TOTAL_WEATHER_IMAGES; i++) {
+		bmp_deinit_container(&weather_images[i]);
 	}
 	
 	fonts_unload_custom_font(font_temperature);
@@ -594,7 +612,7 @@ void request_weather() {
 	
 	// Build the HTTP request
 	DictionaryIterator *body;
-	HTTPResult result = http_out_get("http://www.zone-mr.net/api/weather.php", WEATHER_HTTP_COOKIE, &body);
+	HTTPResult result = http_out_get("http://ofkorth.net/pebble/weather", WEATHER_HTTP_COOKIE, &body); //http://www.zone-mr.net/api/weather.php
 	if(result != HTTP_OK) {
 		return;
 	}
