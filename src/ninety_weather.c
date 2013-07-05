@@ -55,7 +55,7 @@ const int DATENUM_IMAGE_RESOURCE_IDS[] = {
 };
 
 
-#define TOTAL_WEATHER_IMAGES 16
+#define TOTAL_WEATHER_IMAGES 1
 BmpContainer weather_images[TOTAL_WEATHER_IMAGES];
 
 static int WEATHER_IMAGE_RESOURCE_IDS[] = {
@@ -119,34 +119,6 @@ unsigned short get_display_hour(unsigned short hour) {
 
   // Converts "0" to "12"
   return display_hour ? display_hour : 12;
-}
-
-
-int moon_phase(int y, int m, int d)
-{
-    /*
-      calculates the moon phase (0-7), accurate to 1 segment.
-      0 = > new moon.
-      4 => full moon.
-      */
-    int c,e;
-    double jd;
-    int b;
-
-    if (m < 3) {
-        y--;
-        m += 12;
-    }
-    ++m;
-    c = 365.25*y;
-    e = 30.6*m;
-    jd = c+e+d-694039.09;  	/* jd is total days elapsed */
-    jd /= 29.53;        	/* divide by the moon cycle (29.53 days) */
-    b = jd;		   			/* int(jd) -> b, take integer part of jd */
-    jd -= b;		   		/* subtract integer part to leave fractional part of original jd */
-    b = jd*8 + 0.5;	   		/* scale fraction from 0-8 and round by adding 0.5 */
-    b = b & 7;		   		/* 0 and 8 are the same so turn 8 into 0 */
-    return b;
 }
 
 void adjustTimezone(float* time) 
@@ -238,9 +210,9 @@ void failed(int32_t cookie, int http_status, void* context) {
 		set_container_image(&weather_images[0], WEATHER_IMAGE_RESOURCE_IDS[16], GPoint(12, 5));
 		text_layer_set_text(&text_temperature_layer, "---°");
 	}
-	
-	//link_monitor_handle_failure(http_status);
-	
+	located = false;
+	//text_layer_set_text(&debug_layer, "failed");
+
 	//Re-request the location and subsequently weather on next minute tick
 	//located = false;
 }
@@ -248,6 +220,8 @@ void failed(int32_t cookie, int http_status, void* context) {
 void success(int32_t cookie, int http_status, DictionaryIterator* received, void* context) {
 	
 	if(cookie != WEATHER_HTTP_COOKIE) return;
+	
+	text_layer_set_text(&debug_layer, "success");
 	
 	Tuple* icon_tuple = dict_find(received, WEATHER_KEY_ICON);
 	if(icon_tuple) {
@@ -271,8 +245,6 @@ void success(int32_t cookie, int http_status, DictionaryIterator* received, void
 	}
 	
 	link_monitor_handle_success(&data);
-	//display_counters(&calls_layer, data, 1);
-	//display_counters(&sms_layer, data, 2);
 }
 
 void location(float latitude, float longitude, float altitude, float accuracy, void* context) {
@@ -294,22 +266,23 @@ bool read_state_data(DictionaryIterator* received, struct Data* d){
 	
 	Tuple* tuple = dict_read_first(received);
 	if(!tuple) return false;
+	/*
 	do {
 		switch(tuple->key) {
 	  		case TUPLE_MISSED_CALLS:
-				d->missed = tuple->value->uint8;
+				//d->missed = tuple->value->uint8;
 				
-				static char temp_calls[5];
-				memcpy(temp_calls, itoa(tuple->value->uint8), 4);
+				//static char temp_calls[5];
+				//memcpy(temp_calls, itoa(tuple->value->uint8), 4);
 				//text_layer_set_text(&calls_layer, temp_calls);
 				
 				has_data = true;
 				break;
 			case TUPLE_UNREAD_SMS:
-				d->unread = tuple->value->uint8;
+				//d->unread = tuple->value->uint8;
 			
-				static char temp_sms[5];
-				memcpy(temp_sms, itoa(tuple->value->uint8), 4);
+				//static char temp_sms[5];
+				//memcpy(temp_sms, itoa(tuple->value->uint8), 4);
 				//text_layer_set_text(&sms_layer, temp_sms);
 			
 				has_data = true;
@@ -317,7 +290,11 @@ bool read_state_data(DictionaryIterator* received, struct Data* d){
 		}
 	}
 	while((tuple = dict_read_next(received)));
+	*/
 	
+	//test
+	//has_data = true;
+
 	return has_data;
 }
 
@@ -325,8 +302,6 @@ void app_received_msg(DictionaryIterator* received, void* context) {
 	link_monitor_handle_success(&data);
 	if(read_state_data(received, &data)) 
 	{
-		//display_counters(&calls_layer, data, 1);
-		//display_counters(&sms_layer, data, 2);
 		if(!located)
 		{
 			request_weather();
@@ -335,8 +310,6 @@ void app_received_msg(DictionaryIterator* received, void* context) {
 }
 static void app_send_failed(DictionaryIterator* failed, AppMessageResult reason, void* context) {
 	link_monitor_handle_failure(reason, &data);
-	//display_counters(&calls_layer, data, 1);
-	//display_counters(&sms_layer, data, 2);
 }
 
 bool register_callbacks() {
@@ -437,7 +410,7 @@ void handle_minute_tick(AppContextRef ctx, PebbleTickEvent *t) {
 		http_location_request();
 	}
 	
-	// Every 15 minutes, request updated time
+	// request updated time
 	http_time_request();
 	
 	if(!calculated_sunset_sunrise)
@@ -476,17 +449,18 @@ void handle_init(AppContextRef ctx) {
 	}
 
 	// Calendar Week Text
-	text_layer_init(&cwLayer, GRect(108, 50, 80 /* width */, 30 /* height */));
+	text_layer_init(&cwLayer, GRect(144-87, 50, 80 /* width */, 30 /* height */));
 	layer_add_child(&background_image.layer.layer, &cwLayer.layer);
 	text_layer_set_text_color(&cwLayer, GColorWhite);
 	text_layer_set_background_color(&cwLayer, GColorClear);
+	text_layer_set_text_alignment(&cwLayer, GTextAlignmentRight);
 	text_layer_set_font(&cwLayer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
-
+	
 	// Sunrise Text
 	text_layer_init(&text_sunrise_layer, window.layer.frame);
 	text_layer_set_text_color(&text_sunrise_layer, GColorWhite);
 	text_layer_set_background_color(&text_sunrise_layer, GColorClear);
-	layer_set_frame(&text_sunrise_layer.layer, GRect(7, 152, 100, 30));
+	layer_set_frame(&text_sunrise_layer.layer, GRect(7, 152, 40, 16));
 	text_layer_set_font(&text_sunrise_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
 	layer_add_child(&window.layer, &text_sunrise_layer.layer);
 
@@ -497,6 +471,7 @@ void handle_init(AppContextRef ctx) {
 	layer_set_frame(&text_sunset_layer.layer, GRect(110, 152, 100, 30));
 	text_layer_set_font(&text_sunset_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
 	layer_add_child(&window.layer, &text_sunset_layer.layer); 
+	
   
 	// Text for Temperature
 	text_layer_init(&text_temperature_layer, window.layer.frame);
@@ -504,7 +479,7 @@ void handle_init(AppContextRef ctx) {
 	text_layer_set_background_color(&text_temperature_layer, GColorClear);
 	layer_set_frame(&text_temperature_layer.layer, GRect(68, 3, 64, 68));
 	text_layer_set_font(&text_temperature_layer, font_temperature);
-	layer_add_child(&window.layer, &text_temperature_layer.layer);  
+	layer_add_child(&window.layer, &text_temperature_layer.layer); 
   
 	// Day of week text
 	text_layer_init(&DayOfWeekLayer, GRect(5, 62, 130 /* width */, 30 /* height */));
@@ -513,31 +488,13 @@ void handle_init(AppContextRef ctx) {
 	text_layer_set_background_color(&DayOfWeekLayer, GColorClear);
 	text_layer_set_font(&DayOfWeekLayer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
 
-	// Calls Info layer
-	/*
-	text_layer_init(&calls_layer, window.layer.frame);
-	text_layer_set_text_color(&calls_layer, GColorWhite);
-	text_layer_set_background_color(&calls_layer, GColorClear);
-	layer_set_frame(&calls_layer.layer, GRect(12, 135, 100, 30));
-	text_layer_set_font(&calls_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
-	layer_add_child(&window.layer, &calls_layer.layer);
-	text_layer_set_text(&calls_layer, "?");
-	
-	// SMS Info layer 
-	text_layer_init(&sms_layer, window.layer.frame);
-	text_layer_set_text_color(&sms_layer, GColorWhite);
-	text_layer_set_background_color(&sms_layer, GColorClear);
-	layer_set_frame(&sms_layer.layer, GRect(41, 135, 100, 30));
-	text_layer_set_font(&sms_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
-	layer_add_child(&window.layer, &sms_layer.layer);
-	text_layer_set_text(&sms_layer, "?");
-	*/
 	
 	// DEBUG Info layer 
 	text_layer_init(&debug_layer, window.layer.frame);
 	text_layer_set_text_color(&debug_layer, GColorWhite);
 	text_layer_set_background_color(&debug_layer, GColorClear);
-	layer_set_frame(&debug_layer.layer, GRect(50, 152, 100, 30));
+	text_layer_set_text_alignment(&debug_layer, GTextAlignmentLeft);
+	layer_set_frame(&debug_layer.layer, GRect(37, 152, 130, 16));
 	text_layer_set_font(&debug_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
 	layer_add_child(&window.layer, &debug_layer.layer);
 	
@@ -605,14 +562,17 @@ void pbl_main(void *params) {
 
 void request_weather() {
 	
+
 	if(!located) {
 		http_location_request();
 		return;
 	}
 	
-	// Build the HTTP request
+	text_layer_set_text(&debug_layer, "req weather");
+	
+	// Build the HTTP request  //http://ofkorth.net/pebble/weather
 	DictionaryIterator *body;
-	HTTPResult result = http_out_get("http://ofkorth.net/pebble/weather", WEATHER_HTTP_COOKIE, &body); //http://www.zone-mr.net/api/weather.php
+	HTTPResult result = http_out_get("http://www.mirz.com/httpebble/weather.php", WEATHER_HTTP_COOKIE, &body); //http://www.zone-mr.net/api/weather.php
 	if(result != HTTP_OK) {
 		return;
 	}
@@ -627,5 +587,7 @@ void request_weather() {
 	}
 	
 	// Request updated Time
-	http_time_request();
+	http_time_request();	
+		
+
 }
